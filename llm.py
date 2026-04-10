@@ -16,7 +16,7 @@ def explain_salary(salary):
         response = requests.post(
             "http://localhost:11434/api/generate",
             json={
-                "model": "qwen3.5:4b",
+                "model": "phi3:mini",
                 "prompt": prompt,
                 "stream": False
             }
