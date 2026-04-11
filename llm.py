@@ -1,15 +1,20 @@
 import requests
 
-def explain_salary(salary):
+def explain_salary(salary, experience, employment, company, remote):
     prompt = f"""
-    A data science salary prediction is {salary} USD.
+    A data science salary of {salary} USD was predicted with:
+    - Experience level: {experience}
+    - Employment type: {employment}
+    - Company size: {company}
+    - Remote ratio: {remote}%
 
-    Explain:
-    - is this high or low
-    - what factors affect it
-    - what this means for a job seeker
+    Explain briefly:
+    - why this salary makes sense
+    - how these factors influence it
+    - what it means for a job seeker
 
-    Keep it short, simple, and insightful.
+    Keep it short (3-4 sentences), clear, and specific.
+    Do not use headings or markdown.
     """
 
     try:

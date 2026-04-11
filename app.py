@@ -3,12 +3,11 @@ import pandas as pd
 import requests
 import seaborn as sns
 import matplotlib.pyplot as plt
+import joblib
 from supabase import create_client
 from llm import explain_salary
 import os
-
 from dotenv import load_dotenv
-import os
 
 load_dotenv()
 
@@ -17,7 +16,6 @@ load_dotenv()
 # ========================
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ========================
@@ -27,83 +25,33 @@ st.title("💼 Data Science Salary Dashboard")
 st.write("Understand salary trends and predict salaries using AI.")
 
 # ========================
-# LOAD DATA (FOR EDA ONLY)
+# LOAD DATA
 # ========================
 df = pd.read_csv("salaries.csv")
-
-# ========================
-# CLEAN DATA (LIGHT CLEAN)
-# ========================
 df = df[(df["salary_in_usd"] > 10000) & (df["salary_in_usd"] < 500000)]
 
 # ========================
-# 📊 EDA SECTION
+# EDA
 # ========================
 st.header("📊 Exploratory Data Analysis")
-
-# ------------------------
-# Salary Distribution
-# ------------------------
-st.subheader("Salary Distribution")
 
 fig, ax = plt.subplots()
 sns.histplot(df["salary_in_usd"], bins=30, kde=True, ax=ax)
 st.pyplot(fig)
 
-st.write("""
-💡 Insight:
-The salary distribution is right-skewed.
-Most data science roles cluster between 50k–150k USD,
-but a small number of senior roles push salaries much higher.
-""")
-
-# ------------------------
-# Experience vs Salary
-# ------------------------
-st.subheader("📊 Salary by Experience")
-
 fig, ax = plt.subplots()
 sns.boxplot(x="experience_level", y="salary_in_usd", data=df, ax=ax)
 st.pyplot(fig)
-
-st.write("""
-💡 Insight:
-Salaries increase significantly with experience.
-Senior and executive roles dominate the high salary range.
-""")
-
-# ------------------------
-# Remote work
-# ------------------------
-st.subheader("📊 Salary by Remote Work")
 
 fig, ax = plt.subplots()
 sns.boxplot(x="remote_ratio", y="salary_in_usd", data=df, ax=ax)
 st.pyplot(fig)
 
-st.write("""
-💡 Insight:
-Higher remote ratios often correlate with higher salaries.
-Global companies tend to offer better compensation.
-""")
-
-# ------------------------
-# Average salary by experience
-# ------------------------
-st.subheader("📊 Average Salary by Experience")
-
-avg_salary = df.groupby("experience_level")["salary_in_usd"].mean().sort_values()
+avg_salary = df.groupby("experience_level")["salary_in_usd"].mean()
 st.bar_chart(avg_salary)
 
-st.write("""
-💡 Insight:
-Clear progression:
-Entry → Mid → Senior → Executive.
-Experience is the strongest driver of salary.
-""")
-
 # ========================
-# 🤖 PREDICTION SECTION
+# PREDICTION
 # ========================
 st.header("🤖 Salary Prediction")
 
@@ -111,6 +59,10 @@ experience = st.selectbox("Experience Level", ["EN", "MI", "SE", "EX"])
 employment = st.selectbox("Employment Type", ["FT", "PT", "CT", "FL"])
 company = st.selectbox("Company Size", ["S", "M", "L"])
 remote = st.slider("Remote Ratio", 0, 100, 50)
+
+# 👉 ADD THESE (VERY IMPORTANT)
+job_title = st.selectbox("Job Title", ["Data Scientist", "Data Engineer", "Data Analyst"])
+location = st.selectbox("Company Location", ["US", "UK", "CA", "IN"])
 
 if st.button("Predict Salary"):
     try:
@@ -120,55 +72,60 @@ if st.button("Predict Salary"):
                 "experience_level": experience,
                 "employment_type": employment,
                 "company_size": company,
-                "remote_ratio": remote
+                "remote_ratio": remote,
+                "job_title": job_title,
+                "company_location": location
             }
         )
 
         result = response.json()
-        salary = result["salary"]
 
-        st.success(f"💰 Predicted Salary: {salary} USD")
+        if "error" in result:
+            st.error(result["error"])
+        else:
+            salary = result["salary"]
 
-        # ------------------------
-        # LLM EXPLANATION
-        # ------------------------
-        st.subheader("🤖 AI Explanation")
+            st.success(f"💰 Predicted Salary: {salary:,.2f} USD")
 
-        explanation = explain_salary(salary)
-        st.write(explanation)
+            # LLM explanation
+            with st.spinner("Generating AI explanation..."):
+                explanation = explain_salary(
+                    salary,
+                    experience,
+                    employment,
+                    company,
+                    remote
+                )
+            st.write(explanation)
 
     except Exception as e:
         st.error(f"API error: {e}")
 
 # ========================
-# 📜 HISTORY FROM SUPABASE
+# HISTORY
 # ========================
 st.header("📜 Prediction History")
 
 try:
-    response = supabase.table("predictions").select("*").execute()
-    data = response.data
-
+    data = supabase.table("predictions").select("*").execute().data
     if data:
-        history_df = pd.DataFrame(data)
-        st.dataframe(history_df)
+        st.dataframe(pd.DataFrame(data))
     else:
         st.write("No predictions yet.")
-
 except Exception as e:
-    st.error(f"Error loading history: {e}")
+    st.error(e)
 
 # ========================
-# 📈 MODEL PERFORMANCE
+# METRICS
 # ========================
 st.header("📈 Model Performance")
 
-st.write("""
-MAE: ~15000 USD  
-RMSE: ~25000 USD  
-R²: ~0.75  
-
-💡 Insight:
-The model captures general salary trends well,
-but extreme salaries remain harder to predict.
+try:
+    metrics = joblib.load("metrics.pkl")
+    st.write(f"""
+MAE: {metrics['mae']:.2f}  
+RMSE: {metrics['rmse']:.2f}  
+R²: {metrics['r2']:.4f}
 """)
+except:
+    st.error("Run train.py first")
